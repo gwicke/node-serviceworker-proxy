@@ -68,15 +68,14 @@ class ServiceWorkerProxy {
 }
 
 module.exports = function(options) {
-    console.log('setup', options);
     const swproxy = new ServiceWorkerProxy(options);
     return {
         spec: {
             paths: {
                 '/{path}': {
-                    'all': {
+                    'get': {
                         operationId: 'proxyRequest',
-                        consumes: '*/*',
+                        consumes: [ '*/*' ],
                         parameters: [
                         {
                             name: 'path',
