@@ -24,6 +24,7 @@
   "dependencies": {
     "bluebird": "^3.4.1",
     "hyperswitch": "^0.6.3",
+    "node-fetch-polyfill": "^2.0.0",
     "node-serviceworker": "^0.1.1",
     "service-runner": "^2.0.7"
   }

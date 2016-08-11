@@ -1,42 +1,18 @@
-# RESTBase wikimedia example config
-
-# Load some project templates. These are referenced / shared between domains
-# in the root_spec further down.
-swproxy: &swproxy
-  paths:
-    /{api:v1}:
-      x-modules:
-        - spec:
-            info:
-              version: 1.0.0-beta
-              title: ServiceWorker render proxy service
-              description: >
-                Server-side ServiceWorker execution for pre-rendering &
-                support of clients without ServiceWorker support.
-
-              termsOfService: https://wikimediafoundation.org/wiki/Terms_of_Use
-              contact:
-                name: the Wikimedia Services team
-                url: http://mediawiki.org/wiki/Wikimedia_Services
-              license:
-                name: Apache2
-                url: http://www.apache.org/licenses/LICENSE-2.0
-
-            x-modules:
-              - path: v1/sw_proxy.js
-                options:
-                  # Try to load a serviceworker config using the following
-                  # path patterns for each domain:
-                  registration:
-                    paths:
-                      - /api/rest_v1/feed/serviceworkers
-                    refresh_interval_seconds: 120
-
-
-
-
 spec_root: &spec_root
-  title: "ServiceWorker proxy service"
+  info:
+    version: 1.0.0-beta
+    title: ServiceWorker render proxy service
+    description: >
+      Server-side ServiceWorker execution for pre-rendering &
+      support of clients without ServiceWorker support.
+
+    termsOfService: https://wikimediafoundation.org/wiki/Terms_of_Use
+    contact:
+      name: the Wikimedia Services team
+      url: http://mediawiki.org/wiki/Wikimedia_Services
+    license:
+      name: Apache2
+      url: http://www.apache.org/licenses/LICENSE-2.0
   x-sub-request-filters:
     - type: default
       name: http
@@ -49,7 +25,16 @@ spec_root: &spec_root
           - pattern: /^https?:\/\//
   paths:
     # global domain
-    /{domain}: *swproxy
+    /{domain}/{api:v1}:
+        x-modules:
+          - path: ./v1/sw_proxy.js
+            options:
+              # Try to load a serviceworker config using the following
+              # path patterns for each domain:
+              registration:
+                paths:
+                  - /api/rest_v1/feed/serviceworkers
+                refresh_interval_seconds: 120
 
     # A robots.txt to make sure that the content isn't indexed.
     /robots.txt:

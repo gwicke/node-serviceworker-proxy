@@ -67,14 +67,14 @@ class ServiceWorkerProxy {
     }
 }
 
-module.exports = (options) => {
+module.exports = function(options) {
     console.log('setup', options);
     const swproxy = new ServiceWorkerProxy(options);
     return {
         spec: {
             paths: {
-                '/{+path}': {
-                    'any': {
+                '/{path}': {
+                    'all': {
                         operationId: 'proxyRequest',
                         consumes: '*/*',
                         parameters: [
@@ -84,12 +84,6 @@ module.exports = (options) => {
                             type: 'string',
                             required: 'false',
                             description: 'The request path',
-                        },
-                        {
-                            name: 'body',
-                            in: 'body',
-                            required: 'false',
-                            description: 'Optional POST / PUT body',
                         }],
                     },
                 },
@@ -97,6 +91,6 @@ module.exports = (options) => {
         },
         operations: {
             proxyRequest: swproxy.proxyRequest.bind(swproxy),
-        }
+        },
     };
 };
