@@ -33,16 +33,14 @@ render_api: &render_api
               registration:
                 paths:
                   - /api/rest_v1/feed/serviceworkers
-            refresh_interval_seconds: 120
+                refresh_interval_seconds: 120
 
 spec_root: &spec_root
   paths:
-    # global domain
-    /{domain}/{api:v1}: *render_api
-
     # A robots.txt to make sure that the content isn't indexed.
     /robots.txt:
       get:
+        x-hidden: true
         x-request-handler:
           - static:
               return:
@@ -53,6 +51,9 @@ spec_root: &spec_root
                   User-agent: *
                   Allow: /*/v1/?doc
                   Disallow: /
+
+    # global domain
+    /{domain}/{api:v1}: *render_api
 
 # Finally, a standard service-runner config.
 services:

@@ -21,25 +21,33 @@ class ServiceWorkerProxy {
      * container.
      */
     refreshWorkersForDomain(domain) {
-        return fetch(path.join('https://' + domain, this._options.registration.paths[0]))
+        const url = 'https://' + path.join(domain, this._options.registration.paths[0]);
+        return fetch(url)
             // TODO: check return status / use higher level wrapper that maps
             // errors to throw().
-            .then(res => res.json())
+            .then(res => {
+                if (res.status !== 200) {
+                    // HACK
+                    return {'/w/iki/': 'https://en.wikipedia.org/w/index.php?title=User:GWicke/sw.js&action=raw&ctype=text/javascript' };
+                    // throw new Error(`Registration fetch for ${domain} failed`);
+                }
+                res.json();
+            })
             .then(mapping => {
                 // Remove all registrations for this domain
-                this._swcontainer.unregisterDomain(domain);
+                this._swcontainer.x_clearDomain(domain);
                 // scope -> url
-                return P.each(Object.keys(mapping, scope => {
+                return P.each(Object.keys(mapping), scope => {
                     return this._swcontainer.register(mapping[scope],
                             { scope: scope, online: true });
-                }));
+                });
             });
     }
 
     proxyRequest(hyper, req) {
         const rp = req.params;
         let setupPromise = P.resolve();
-        if (!this._swcontainer.haveDomain(rp.domain)) {
+        if (!this._swcontainer._registrations.get(rp.domain)) {
             // First, install workers for this domain.
             setupPromise = this.refreshWorkersForDomain(rp.domain);
             // Refresh registrations every two minutes.
@@ -47,12 +55,25 @@ class ServiceWorkerProxy {
                     this._options.registration.refresh_interval_seconds * 1000);
         }
 
+        const reqURL = 'https://en.wikipedia.org/' + req.params.path;
         return setupPromise
-            .then(() => this._swcontainer.getRegistration(testURL))
+            .then(() => this._swcontainer.getRegistration(reqURL))
             .then(registration => {
                 if (registration) {
                     // Request is handled by a ServiceWorker.
-                    return registration.fetch(rp.path);
+                    return registration.fetch(reqURL)
+                        .then(res => {
+                            // TODO: Directly handle the response stream.
+                            return res.text()
+                                .then(body => {
+                                    res.headers['content-type'] = 'text/html';
+                                    return {
+                                        status: res.status,
+                                        headers: res.headers,
+                                        body: body
+                                    };
+                                });
+                        })
                 } else {
                     // Fall through to a plain request.
                     // TODO: Properly reconstruct request, including query,
@@ -73,7 +94,7 @@ module.exports = function(options) {
         spec: {
             paths: {
                 '/{+path}': {
-                    'get': {
+                    'all': {
                         operationId: 'proxyRequest',
                         consumes: [ '*/*' ],
                         parameters: [
