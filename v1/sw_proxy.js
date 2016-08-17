@@ -64,7 +64,7 @@ class ServiceWorkerProxy {
                     return registration.fetch(reqURL)
                         .then(res => {
                             // TODO: Directly handle the response stream.
-                            return res.text()
+                            return res.blob()
                                 .then(body => {
                                     res.headers['content-type'] = 'text/html';
                                     return {
