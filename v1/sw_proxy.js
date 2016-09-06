@@ -57,7 +57,6 @@ class ServiceWorkerProxy {
     proxyRequest(hyper, req) {
         const domain = 'en.wikipedia.org';
         req.headers.host = domain;
-        console.log(req);
         const rp = req.params;
         let setupPromise = P.resolve();
         if (!this._swcontainer._registrations.get(domain)) {
