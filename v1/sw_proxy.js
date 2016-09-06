@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const querystring = require('querystring');
 const P = require('bluebird');
 
 const ServiceWorkerContainer = require('node-serviceworker');
@@ -44,18 +45,30 @@ class ServiceWorkerProxy {
             });
     }
 
+    convertHeaders(headers) {
+        const res = {};
+        headers.forEach((value, key) => {
+            res[key] = value;
+        });
+        delete res['content-encoding'];
+        return res;
+    }
+
     proxyRequest(hyper, req) {
+        const domain = 'en.wikipedia.org';
+        req.headers.host = domain;
+        console.log(req);
         const rp = req.params;
         let setupPromise = P.resolve();
-        if (!this._swcontainer._registrations.get(rp.domain)) {
+        if (!this._swcontainer._registrations.get(domain)) {
             // First, install workers for this domain.
-            setupPromise = this.refreshWorkersForDomain(rp.domain);
+            setupPromise = this.refreshWorkersForDomain(domain);
             // Refresh registrations every two minutes.
-            setInterval(this.refreshWorkersForDomain.bind(this, rp.domain),
+            setInterval(this.refreshWorkersForDomain.bind(this, domain),
                     this._options.registration.refresh_interval_seconds * 1000);
         }
 
-        const reqURL = 'https://en.wikipedia.org/' + req.params.path;
+        const reqURL = 'https://' + domain + '/' + req.params.path;
         return setupPromise
             .then(() => this._swcontainer.getRegistration(reqURL))
             .then(registration => {
@@ -66,10 +79,11 @@ class ServiceWorkerProxy {
                             // TODO: Directly handle the response stream.
                             return res.blob()
                                 .then(body => {
-                                    res.headers['content-type'] = 'text/html';
+                                    const headers = this.convertHeaders(res.headers);
+                                    headers['content-type'] = 'text/html';
                                     return {
                                         status: res.status,
-                                        headers: res.headers,
+                                        headers: headers,
                                         body: body
                                     };
                                 });
@@ -78,12 +92,21 @@ class ServiceWorkerProxy {
                     // Fall through to a plain request.
                     // TODO: Properly reconstruct request, including query,
                     // post body etc.
-                    req.headers.host = rp.domain;
-                    return fetch('https://' + rp.domain, {
+                    const query = Object.keys(req.query).length ?
+                        '?' + querystring.stringify(req.query) : ''
+                    return fetch('https://' + req.headers.host + '/' + req.params.path + query, {
                             method: req.method,
                             body: req.body,
                             headers: req.headers
-                        });
+                        })
+                    .then(res => res.blob().then(body => {
+                        return {
+                            status: res.status,
+                            headers: this.convertHeaders(res.headers),
+                            body: body
+                        };
+                    }));
+
                 }
             });
     }

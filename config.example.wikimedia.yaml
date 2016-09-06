@@ -1,4 +1,4 @@
-render_api: &render_api
+spec_root: &spec_root
   x-modules:
     - spec:
         info:
@@ -34,26 +34,6 @@ render_api: &render_api
                 paths:
                   - /api/rest_v1/feed/serviceworkers
                 refresh_interval_seconds: 120
-
-spec_root: &spec_root
-  paths:
-    # A robots.txt to make sure that the content isn't indexed.
-    /robots.txt:
-      get:
-        x-hidden: true
-        x-request-handler:
-          - static:
-              return:
-                status: 200
-                headers:
-                  content-type: text/plain
-                body: |
-                  User-agent: *
-                  Allow: /*/v1/?doc
-                  Disallow: /
-
-    # global domain
-    /{domain}/{api:v1}: *render_api
 
 # Finally, a standard service-runner config.
 services:
