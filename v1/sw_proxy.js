@@ -78,7 +78,7 @@ class ServiceWorkerProxy {
                     // Fall through to a plain request.
                     // TODO: Properly reconstruct request, including query,
                     // post body etc.
-                    headers.host = rp.domain;
+                    req.headers.host = rp.domain;
                     return fetch('https://' + rp.domain, {
                             method: req.method,
                             body: req.body,
