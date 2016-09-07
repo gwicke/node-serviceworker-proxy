@@ -2,7 +2,7 @@
 	"predef": [
 		"setImmediate",
 		"Map",
-		"Set",
+		"Set"
 	],
 
 	"bitwise": true,
@@ -27,6 +27,5 @@
 
 	"nomen": false,
 	"loopfunc": true,
-        "esnext": true
-	//"onevar": true
+    "esnext": true
 }

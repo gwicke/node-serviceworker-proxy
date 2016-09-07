@@ -3,6 +3,7 @@
 const path = require('path');
 const querystring = require('querystring');
 const P = require('bluebird');
+const FormData = require('form-data');
 
 const ServiceWorkerContainer = require('node-serviceworker');
 const fetch = require('node-fetch-polyfill');
@@ -89,13 +90,26 @@ class ServiceWorkerProxy {
                                         body: body
                                     };
                                 });
-                        })
+                        });
                 } else {
                     // Fall through to a plain request.
                     // TODO: Properly reconstruct request, including query,
                     // post body etc.
                     const query = Object.keys(req.query).length ?
                         '?' + querystring.stringify(req.query) : '';
+
+                    if (req.method === 'post'
+                            && /urlencoded|multi-part/.test(req.headers['content-type'])
+                            && typeof body === 'object') {
+                        // Convert body to FormData instance
+                        const formData = new FormData();
+                        Object.keys(req.body).forEach(key => {
+                            formData.append(key, req.body[key]);
+                        });
+                        req.body = formData;
+                        Object.assign(req.headers, formData.getHeaders());
+                    }
+
                     return fetch('https://' + req.headers.host + '/' + req.params.path + query, {
                             method: req.method,
                             body: req.body,
