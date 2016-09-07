@@ -29,18 +29,21 @@ class ServiceWorkerProxy {
             .then(res => {
                 if (res.status !== 200) {
                     // HACK
-                    return {'/w/iki/': 'https://en.wikipedia.org/w/index.php?title=User:GWicke/sw.js&action=raw&ctype=text/javascript' };
+                    return [{
+                        scope: '/w/iki/',
+                        scriptURL: 'https://en.wikipedia.org/w/index.php?title=User:GWicke/sw.js&action=raw&ctype=text/javascript',
+                        online: true
+                    }];
                     // throw new Error(`Registration fetch for ${domain} failed`);
                 }
                 res.json();
             })
-            .then(mapping => {
+            .then(mappings => {
                 // Remove all registrations for this domain
                 this._swcontainer.x_clearDomain(domain);
                 // scope -> url
-                return P.each(Object.keys(mapping), scope => {
-                    return this._swcontainer.register(mapping[scope],
-                            { scope: scope, online: true });
+                return P.each(mappings, mapping => {
+                    return this._swcontainer.register(mapping.scriptURL, mapping);
                 });
             });
     }
@@ -92,7 +95,7 @@ class ServiceWorkerProxy {
                     // TODO: Properly reconstruct request, including query,
                     // post body etc.
                     const query = Object.keys(req.query).length ?
-                        '?' + querystring.stringify(req.query) : ''
+                        '?' + querystring.stringify(req.query) : '';
                     return fetch('https://' + req.headers.host + '/' + req.params.path + query, {
                             method: req.method,
                             body: req.body,
