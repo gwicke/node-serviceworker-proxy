@@ -13,6 +13,7 @@ class ServiceWorkerProxy {
     constructor(options) {
         this._options = options;
         this._swcontainer = new ServiceWorkerContainer();
+        this._registrationScripts = {};
     }
 
     /**
@@ -31,7 +32,7 @@ class ServiceWorkerProxy {
                 if (res.status !== 200) {
                     // HACK
                     return [{
-                        scope: '/w/iki/',
+                        scope: '/wiki/',
                         scriptURL: 'https://en.wikipedia.org/w/index.php?title=User:GWicke/sw.js&action=raw&ctype=text/javascript',
                         online: true
                     }];
@@ -42,9 +43,18 @@ class ServiceWorkerProxy {
             .then(mappings => {
                 // Remove all registrations for this domain
                 this._swcontainer.x_clearDomain(domain);
+                this._registrationScripts[domain] = '';
                 // scope -> url
                 return P.each(mappings, mapping => {
-                    return this._swcontainer.register(mapping.scriptURL, mapping);
+                    return this._swcontainer.register(mapping.scriptURL, mapping)
+                    .then(() => {
+                        this._registrationScripts[domain] += '\nif (navigator.serviceWorker) { navigator.serviceWorker.register('
+                                + JSON.stringify('/__sw_'
+                                    // Use base64 encoding to avoid escaping
+                                    // security restrictions for SW URLs.
+                                    + new Buffer(mapping.scope).toString('base64'))
+                                + ', { scope: ' + JSON.stringify(mapping.scope) + ' }); }';
+                    });
                 });
             });
     }
@@ -58,10 +68,39 @@ class ServiceWorkerProxy {
         return res;
     }
 
+    _hackyHostRewrite(host) {
+        if (/^localhost:?/.test(host) || host === 'swproxy.wmflabs.org') {
+            return 'en.wikipedia.org';
+        } else {
+            return host;
+        }
+    }
+
+    _addRegisterScripts(domain, body) {
+        const registrationScripts = this._registrationScripts[domain];
+        if (registrationScripts) {
+            // Inject a ServiceWorker
+            // registration at the end of the
+            // HTML.
+            // TODO: Use stream!
+            return Buffer.concat([
+                    body,
+                    new Buffer('<script>' + registrationScripts + '</script>')
+            ]);
+        }
+        return body;
+    }
+
     proxyRequest(hyper, req) {
-        const domain = 'en.wikipedia.org';
-        req.headers.host = domain;
+        const domain = req.headers.host = this._hackyHostRewrite(req.headers.host);
         const rp = req.params;
+
+        if (/^__sw_/.test(rp.path)) {
+            // Request for a ServiceWorker
+            return this.swRequest(req, domain);
+        }
+
+
         let setupPromise = P.resolve();
         if (!this._swcontainer._registrations.get(domain)) {
             // First, install workers for this domain.
@@ -83,7 +122,10 @@ class ServiceWorkerProxy {
                             return res.blob()
                                 .then(body => {
                                     const headers = this.convertHeaders(res.headers);
-                                    headers['content-type'] = 'text/html';
+                                    if (/^text\/html/.test(headers['content-type'])) {
+                                        body = this._addRegisterScripts(domain, body);
+                                    }
+
                                     return {
                                         status: res.status,
                                         headers: headers,
@@ -126,6 +168,30 @@ class ServiceWorkerProxy {
                 }
             });
     }
+
+
+    swRequest(req, domain) {
+        const reqURL = 'https://' + domain
+            + new Buffer(decodeURIComponent(req.params.path.replace(/^__sw_/, '')), 'base64').toString('utf8');
+        return this._swcontainer.getRegistration(reqURL)
+        .then(registration => {
+            if (registration) {
+                return {
+                    status: 200,
+                    headers: {
+                        'content-type': 'application/javascript',
+                        'Access-Control-Allow-Origin': '*',
+                    },
+                    body: registration.x_getWorkerSource()
+                };
+            } else {
+                return {
+                    status: 404
+                };
+            }
+        });
+    }
+
 }
 
 module.exports = function(options) {
@@ -134,7 +200,7 @@ module.exports = function(options) {
         spec: {
             paths: {
                 '/{+path}': {
-                    'all': {
+                    all: {
                         operationId: 'proxyRequest',
                         consumes: [ '*/*' ],
                         parameters: [
