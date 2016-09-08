@@ -48,15 +48,16 @@ class ServiceWorkerProxy {
                 this._swcontainer.x_clearDomain(domain);
                 this._registrationScripts[domain] = '';
                 // scope -> url
+                if (mappings.length > 1) {
+                    throw new Error("Only a single ServiceWorker is allowed per domain.");
+                }
                 return P.each(mappings, mapping => {
+                    if (mapping.scope !== '/') {
+                        throw new Error("Only the root scope '/' is supported for ServiceWorkers!");
+                    }
                     return this._swcontainer.register(mapping.scriptURL, mapping)
                     .then(() => {
-                        this._registrationScripts[domain] += '\nif (navigator.serviceWorker) { navigator.serviceWorker.register('
-                                + JSON.stringify('/__sw_'
-                                    // Use base64 encoding to avoid escaping
-                                    // security restrictions for SW URLs.
-                                    + new Buffer(mapping.scope).toString('base64'))
-                                + ', { scope: ' + JSON.stringify(mapping.scope) + ' }); }';
+                        this._registrationScripts[domain] = '\nif (navigator.serviceWorker) { navigator.serviceWorker.register("/__sw.js",{scope:"/"}); }';
                     });
                 });
             });
@@ -129,10 +130,6 @@ class ServiceWorkerProxy {
         const domain = req.headers.host = this._hackyHostRewrite(req.headers.host);
         const rp = req.params;
 
-        if (/^__sw_/.test(rp.path)) {
-            // Request for a ServiceWorker
-            return this.swRequest(req, domain);
-        }
 
 
         let setupPromise = P.resolve();
@@ -144,6 +141,12 @@ class ServiceWorkerProxy {
                     this._options.registration.refresh_interval_seconds * 1000);
         }
 
+        if (/^__sw.js$/.test(rp.path)) {
+            // Request for a ServiceWorker
+            return setupPromise.then(() => this.swRequest(req, domain));
+        }
+
+        // ServiceWorker expects absolute URLs
         req.uri = 'https://' + domain + '/' + req.params.path;
         const request = this._makeRequest(req);
         return setupPromise
@@ -168,7 +171,6 @@ class ServiceWorkerProxy {
                         });
                 } else {
                     // Fall through to a plain request.
-
                     return fetch(request)
                     .then(res => {
                         return {
@@ -184,8 +186,7 @@ class ServiceWorkerProxy {
 
 
     swRequest(req, domain) {
-        const reqURL = 'https://' + domain
-            + new Buffer(decodeURIComponent(req.params.path.replace(/^__sw_/, '')), 'base64').toString('utf8');
+        const reqURL = 'https://' + domain + '/';
         return this._swcontainer.getRegistration(reqURL)
         .then(registration => {
             if (registration) {
