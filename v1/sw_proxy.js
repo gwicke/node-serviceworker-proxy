@@ -2,11 +2,14 @@
 
 const path = require('path');
 const querystring = require('querystring');
+const stream = require('stream');
 const P = require('bluebird');
 const FormData = require('form-data');
 
 const ServiceWorkerContainer = require('node-serviceworker');
 const fetch = require('node-fetch-polyfill');
+const Request = fetch.Request;
+const isNodeStream = require('is-stream');
 
 
 class ServiceWorkerProxy {
@@ -32,7 +35,7 @@ class ServiceWorkerProxy {
                 if (res.status !== 200) {
                     // HACK
                     return [{
-                        scope: '/wiki/',
+                        scope: '/',
                         scriptURL: 'https://en.wikipedia.org/w/index.php?title=User:GWicke/sw.js&action=raw&ctype=text/javascript',
                         online: true
                     }];
@@ -79,16 +82,47 @@ class ServiceWorkerProxy {
     _addRegisterScripts(domain, body) {
         const registrationScripts = this._registrationScripts[domain];
         if (registrationScripts) {
-            // Inject a ServiceWorker
-            // registration at the end of the
-            // HTML.
-            // TODO: Use stream!
-            return Buffer.concat([
-                    body,
-                    new Buffer('<script>' + registrationScripts + '</script>')
-            ]);
+            const scriptBuffer = new Buffer('<script>' + registrationScripts + '</script>');
+            // Inject a ServiceWorker registration at the end of the HTML.
+            if (isNodeStream(body)) {
+                // Append a stream
+                const concatStream = new stream.PassThrough();
+                body.on('data', chunk => concatStream.write(chunk));
+                body.on('end', () => concatStream.end(scriptBuffer));
+                body = concatStream;
+            } else {
+                if (!Buffer.isBuffer(body)) {
+                    body = new Buffer('' + body);
+                }
+                return Buffer.concat([body, scriptBuffer]);
+            }
+            return body;
         }
         return body;
+    }
+
+    // Convert a hyperswitch request to a `fetch` Request object.
+    _makeRequest(req) {
+        // Append the query string
+        req.uri += Object.keys(req.query).length ?
+            '?' + querystring.stringify(req.query) : '';
+
+        if (req.method === 'post'
+                && /urlencoded|multi-part/.test(req.headers['content-type'])
+                && typeof body === 'object') {
+            // Convert body to FormData instance
+            const formData = new FormData();
+            Object.keys(req.body).forEach(key => {
+                formData.append(key, req.body[key]);
+            });
+            req.body = formData;
+            Object.assign(req.headers, formData.getHeaders());
+        }
+        return new Request(req.uri, {
+            method: req.method,
+            headers: req.headers,
+            body: req.body
+        });
     }
 
     proxyRequest(hyper, req) {
@@ -110,60 +144,39 @@ class ServiceWorkerProxy {
                     this._options.registration.refresh_interval_seconds * 1000);
         }
 
-        const reqURL = 'https://' + domain + '/' + req.params.path;
+        req.uri = 'https://' + domain + '/' + req.params.path;
+        const request = this._makeRequest(req);
         return setupPromise
-            .then(() => this._swcontainer.getRegistration(reqURL))
+            .then(() => this._swcontainer.getRegistration(req.uri))
             .then(registration => {
                 if (registration) {
                     // Request is handled by a ServiceWorker.
-                    return registration.fetch(reqURL)
+                    return registration.fetch(request.url, request)
                         .then(res => {
                             // TODO: Directly handle the response stream.
-                            return res.blob()
-                                .then(body => {
-                                    const headers = this.convertHeaders(res.headers);
-                                    if (/^text\/html/.test(headers['content-type'])) {
-                                        body = this._addRegisterScripts(domain, body);
-                                    }
+                            let body = res._fastNodeBody();
+                            const headers = this.convertHeaders(res.headers);
+                            if (/^text\/html/.test(headers['content-type'])) {
+                                body = this._addRegisterScripts(domain, body);
+                            }
 
-                                    return {
-                                        status: res.status,
-                                        headers: headers,
-                                        body: body
-                                    };
-                                });
+                            return {
+                                status: res.status,
+                                headers: headers,
+                                body: body
+                            };
                         });
                 } else {
                     // Fall through to a plain request.
-                    // TODO: Properly reconstruct request, including query,
-                    // post body etc.
-                    const query = Object.keys(req.query).length ?
-                        '?' + querystring.stringify(req.query) : '';
 
-                    if (req.method === 'post'
-                            && /urlencoded|multi-part/.test(req.headers['content-type'])
-                            && typeof body === 'object') {
-                        // Convert body to FormData instance
-                        const formData = new FormData();
-                        Object.keys(req.body).forEach(key => {
-                            formData.append(key, req.body[key]);
-                        });
-                        req.body = formData;
-                        Object.assign(req.headers, formData.getHeaders());
-                    }
-
-                    return fetch('https://' + req.headers.host + '/' + req.params.path + query, {
-                            method: req.method,
-                            body: req.body,
-                            headers: req.headers
-                        })
-                    .then(res => res.blob().then(body => {
+                    return fetch(request)
+                    .then(res => {
                         return {
                             status: res.status,
                             headers: this.convertHeaders(res.headers),
-                            body: body
+                            body: res._fastNodeBody()
                         };
-                    }));
+                    });
 
                 }
             });
