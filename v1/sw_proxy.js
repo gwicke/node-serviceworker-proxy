@@ -58,7 +58,7 @@ class ServiceWorkerProxy {
                     mapping.origin = domain;
                     return this._swcontainer.register(mapping.scriptURL, mapping)
                     .then(() => {
-                        this._registrationScripts[domain] = '\nif (navigator.serviceWorker) { navigator.serviceWorker.register("/__sw.js",{scope:"/"}); }';
+                        this._registrationScripts[domain] = '\nif (navigator.serviceWorker) { navigator.serviceWorker.register("/_sw.js",{scope:"/"}); }';
                     });
                 });
             });
@@ -142,7 +142,7 @@ class ServiceWorkerProxy {
                     this._options.registration.refresh_interval_seconds * 1000);
         }
 
-        if (/^__sw.js$/.test(rp.path)) {
+        if (/^__?sw.js$/.test(rp.path)) {
             // Request for a ServiceWorker
             return setupPromise.then(() => this.swRequest(req, domain));
         }
