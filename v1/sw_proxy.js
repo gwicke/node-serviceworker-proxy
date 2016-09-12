@@ -55,6 +55,7 @@ class ServiceWorkerProxy {
                     if (mapping.scope !== '/') {
                         throw new Error("Only the root scope '/' is supported for ServiceWorkers!");
                     }
+                    mapping.origin = domain;
                     return this._swcontainer.register(mapping.scriptURL, mapping)
                     .then(() => {
                         this._registrationScripts[domain] = '\nif (navigator.serviceWorker) { navigator.serviceWorker.register("/__sw.js",{scope:"/"}); }';
