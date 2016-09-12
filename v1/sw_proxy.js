@@ -36,7 +36,7 @@ class ServiceWorkerProxy {
                     // HACK
                     return [{
                         scope: '/',
-                        scriptURL: 'https://en.wikipedia.org/w/index.php?title=User:GWicke/sw.js&action=raw&ctype=text/javascript',
+                        scriptURL: 'https://raw.githubusercontent.com/gwicke/streaming-serviceworker-playground/master/build/sw.js',
                         online: true
                     }];
                     // throw new Error(`Registration fetch for ${domain} failed`);
