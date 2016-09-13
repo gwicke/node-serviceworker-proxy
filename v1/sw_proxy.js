@@ -157,10 +157,11 @@ class ServiceWorkerProxy {
                     // Request is handled by a ServiceWorker.
                     return registration.fetch(request.url, request)
                         .then(res => {
-                            // TODO: Directly handle the response stream.
                             let body = res._fastNodeBody();
                             const headers = this.convertHeaders(res.headers);
-                            if (/^text\/html/.test(headers['content-type'])) {
+                            // Only inject this into non-API / template
+                            // requests.
+                            if (/^text\/html/.test(headers['content-type']) && headers.age === undefined) {
                                 body = this._addRegisterScripts(domain, body);
                             }
 
