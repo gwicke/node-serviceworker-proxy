@@ -5,6 +5,7 @@ const querystring = require('querystring');
 const stream = require('stream');
 const P = require('bluebird');
 const FormData = require('form-data');
+const crypto = require('crypto');
 
 const ServiceWorkerContainer = require('node-serviceworker');
 const fetch = require('node-fetch-polyfill');
@@ -192,13 +193,18 @@ class ServiceWorkerProxy {
         return this._swcontainer.getRegistration(reqURL)
         .then(registration => {
             if (registration) {
+                const src = registration.x_getWorkerSource();
                 return {
                     status: 200,
                     headers: {
                         'content-type': 'application/javascript',
-                        'Access-Control-Allow-Origin': '*',
+                        'access-control-allow-origin': '*',
+                        'cache-control': 'max-age='
+                            + this._options.registration.refresh_interval_seconds,
+                        'etag': crypto.Hash('sha1').update(src).digest().toString('hex'),
+                        'last-modified': new Date().toUTCString()
                     },
-                    body: registration.x_getWorkerSource()
+                    body: src
                 };
             } else {
                 return {
