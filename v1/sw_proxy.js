@@ -17,7 +17,6 @@ class ServiceWorkerProxy {
     constructor(options) {
         this._options = options;
         this._swcontainer = new ServiceWorkerContainer();
-        this._registrationScripts = {};
     }
 
     /**
@@ -47,7 +46,6 @@ class ServiceWorkerProxy {
             .then(mappings => {
                 // Remove all registrations for this domain
                 this._swcontainer.x_clearDomain(domain);
-                this._registrationScripts[domain] = '';
                 // scope -> url
                 if (mappings.length > 1) {
                     throw new Error("Only a single ServiceWorker is allowed per domain.");
@@ -57,10 +55,7 @@ class ServiceWorkerProxy {
                         throw new Error("Only the root scope '/' is supported for ServiceWorkers!");
                     }
                     mapping.origin = domain;
-                    return this._swcontainer.register(mapping.scriptURL, mapping)
-                    .then(() => {
-                        this._registrationScripts[domain] = '\nif (navigator.serviceWorker) { navigator.serviceWorker.register("/_sw.js",{scope:"/"}); }';
-                    });
+                    return this._swcontainer.register(mapping.scriptURL, mapping);
                 });
             });
     }
@@ -80,28 +75,6 @@ class ServiceWorkerProxy {
         } else {
             return host;
         }
-    }
-
-    _addRegisterScripts(domain, body) {
-        const registrationScripts = this._registrationScripts[domain];
-        if (registrationScripts) {
-            const scriptBuffer = new Buffer('<script>' + registrationScripts + '</script>');
-            // Inject a ServiceWorker registration at the end of the HTML.
-            if (isNodeStream(body)) {
-                // Append a stream
-                const concatStream = new stream.PassThrough();
-                body.on('data', chunk => concatStream.write(chunk));
-                body.on('end', () => concatStream.end(scriptBuffer));
-                body = concatStream;
-            } else {
-                if (!Buffer.isBuffer(body)) {
-                    body = new Buffer('' + body);
-                }
-                return Buffer.concat([body, scriptBuffer]);
-            }
-            return body;
-        }
-        return body;
     }
 
     // Convert a hyperswitch request to a `fetch` Request object.
@@ -163,7 +136,8 @@ class ServiceWorkerProxy {
                             // Only inject this into non-API / template
                             // requests.
                             if (/^text\/html/.test(headers['content-type']) && headers.age === undefined) {
-                                body = this._addRegisterScripts(domain, body);
+                                // Add a SW registration header
+                                headers.link = '</_sw.js>; rel=serviceworker; scope=/';
                             }
 
                             return {
