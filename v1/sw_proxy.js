@@ -6,6 +6,13 @@ const stream = require('stream');
 const P = require('bluebird');
 const FormData = require('form-data');
 const crypto = require('crypto');
+const resolve_url = require('url').resolve;
+function make_url(domain, path) {
+    if (!/^http:\/\//.test(domain)) {
+        domain = 'https://' + domain;
+    }
+    return resolve_url(domain, path);
+}
 
 const ServiceWorkerContainer = require('node-serviceworker');
 const fetch = require('node-fetch-polyfill');
@@ -16,48 +23,22 @@ const isNodeStream = require('is-stream');
 class ServiceWorkerProxy {
     constructor(options) {
         this._options = options;
+        // Compile default_domain_pattern, if set
+        if (options.default_domain_pattern) {
+            options.default_domain_pattern = new RegExp(options.default_domain_pattern);
+        }
         this._swcontainer = new ServiceWorkerContainer();
     }
 
     /**
      * Install / refresh ServiceWorkers for a given domain
      *
-     * Uses registration.paths to fetch a JSON blob with a mapping from scope
-     * to serviceworker URL, and installs those serviceworkers in the
-     * container.
+     * Uses options.domains for the per-domain (or default) config.
      */
-    refreshWorkersForDomain(domain) {
-        const url = 'https://' + path.join(domain, this._options.registration.paths[0]);
-        return fetch(url)
-            // TODO: check return status / use higher level wrapper that maps
-            // errors to throw().
-            .then(res => {
-                if (res.status !== 200) {
-                    // HACK
-                    return [{
-                        scope: '/',
-                        scriptURL: 'https://raw.githubusercontent.com/gwicke/streaming-serviceworker-playground/master/build/sw.js',
-                        online: true
-                    }];
-                    // throw new Error(`Registration fetch for ${domain} failed`);
-                }
-                res.json();
-            })
-            .then(mappings => {
-                // Remove all registrations for this domain
-                this._swcontainer.x_clearDomain(domain);
-                // scope -> url
-                if (mappings.length > 1) {
-                    throw new Error("Only a single ServiceWorker is allowed per domain.");
-                }
-                return P.each(mappings, mapping => {
-                    if (mapping.scope !== '/') {
-                        throw new Error("Only the root scope '/' is supported for ServiceWorkers!");
-                    }
-                    mapping.origin = domain;
-                    return this._swcontainer.register(mapping.scriptURL, mapping);
-                });
-            });
+    refreshWorkersForDomain(domain, domainOptions) {
+        // Remove all registrations for this domain
+        this._swcontainer.x_clearDomain(domain);
+        return this._swcontainer.register(domainOptions.scriptURL, domainOptions);
     }
 
     convertHeaders(headers) {
@@ -109,11 +90,26 @@ class ServiceWorkerProxy {
 
         let setupPromise = P.resolve();
         if (!this._swcontainer._registrations.get(domain)) {
-            // First, install workers for this domain.
-            setupPromise = this.refreshWorkersForDomain(domain);
-            // Refresh registrations every two minutes.
-            setInterval(this.refreshWorkersForDomain.bind(this, domain),
-                    this._options.registration.refresh_interval_seconds * 1000);
+            const options = this._options;
+            // Check if the domain is supported
+            if (!options.domains[domain] && options.default_domain_restriction
+                && !options.default_domain_restriction.test(domain)) {
+                throw new Error(`Unsupported host: ${domain}`);
+            }
+            const domainOptions = Object.assign({},
+                options.domain_defaults,
+                options.domains[domain]);
+
+            // Set up / normalize options.
+            domainOptions.scriptURL = make_url(domain, domainOptions.scriptURL);
+            domainOptions.scope = '/';
+            domainOptions.origin = domain;
+
+            // All is good. Install workers for this domain.
+            setupPromise = this.refreshWorkersForDomain(domain, domainOptions);
+            // Refresh registrations periodically in the background.
+            setInterval(this.refreshWorkersForDomain.bind(this, domain, domainOptions),
+                    domainOptions.sw_default_cache_control['s-maxage'] * 1000);
         }
 
         if (/^__?sw.js$/.test(rp.path)) {
@@ -121,8 +117,8 @@ class ServiceWorkerProxy {
             return setupPromise.then(() => this.swRequest(req, domain));
         }
 
-        // ServiceWorker expects absolute URLs
-        req.uri = 'https://' + domain + '/' + req.params.path;
+        // ServiceWorker expects absolute URLs, so resolve the URL.
+        req.uri = make_url(domain, req.params.path);
         const request = this._makeRequest(req);
         return setupPromise
             .then(() => this._swcontainer.getRegistration(req.uri))
@@ -136,7 +132,14 @@ class ServiceWorkerProxy {
                             // Only inject this into non-API / template
                             // requests.
                             if (/^text\/html/.test(headers['content-type']) && headers.age === undefined) {
-                                // Add a SW registration header
+                                // Add a SW registration header. See
+                                // https://github.com/w3c/ServiceWorker/issues/685 for spec discussion.
+                                // Header-based registration is currently only
+                                // supported in Chrome, but that's mostly a
+                                // good thing as Firefox's ServiceWorker
+                                // support ist still fairly immature. For
+                                // example, it is lacking ReadableStream
+                                // support.
                                 headers.link = '</_sw.js>; rel=serviceworker; scope=/';
                             }
 
@@ -174,7 +177,7 @@ class ServiceWorkerProxy {
                         'content-type': 'application/javascript',
                         'access-control-allow-origin': '*',
                         'cache-control': 'max-age='
-                            + this._options.registration.refresh_interval_seconds,
+                            + this._options.domain_defaults.sw_default_cache_control['max-age'],
                         'etag': crypto.Hash('sha1').update(src).digest().toString('hex'),
                         'last-modified': new Date().toUTCString()
                     },

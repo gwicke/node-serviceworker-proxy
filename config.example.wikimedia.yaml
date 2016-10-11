@@ -20,20 +20,27 @@ spec_root: &spec_root
             name: http
             options:
               allow:
-                - pattern: /^https?:\/\/[a-zA-Z0-9\.]+\/w\/api\.php/
-                  forward_headers: true
-                - pattern: /^https?:\/\/parsoid-beta.wmflabs.org.+/
-                  forward_headers: true
                 - pattern: /^https?:\/\//
         x-modules:
           - path: ./v1/sw_proxy.js
             options:
-              # Try to load a serviceworker config using the following
-              # path patterns for each domain:
-              registration:
-                paths:
-                  - /api/rest_v1/feed/serviceworkers
-                refresh_interval_seconds: 120
+              # TODO: Restrict default domains with a regexp
+              # default_domain_pattern: \\.(?:wikipedia.org)$
+              domain_defaults:
+                scriptURL: /_sw.js
+                # Override for cache-control; todo: use s-maxage from sw
+                # response?
+                # - parse cache-control in response
+                # - use s-maxage for server side, fall back to default
+                # - send supplied max-age to client, fall back to config
+                # default
+                sw_default_cache_control:
+                    max-age: 3600
+                    s-maxage: 300
+                # Per-domain config / overrides
+              domains:
+                en.wikipedia.org:
+                  scriptURL: https://raw.githubusercontent.com/gwicke/streaming-serviceworker-playground/master/build/sw.js
 
 # Finally, a standard service-runner config.
 services:
