@@ -18,6 +18,9 @@ const ServiceWorkerContainer = require('node-serviceworker');
 const fetch = require('node-fetch-polyfill');
 const Request = fetch.Request;
 const isNodeStream = require('is-stream');
+const registrationScriptBuffer = new Buffer('<script>\n'
+    + 'if (navigator.serviceWorker && window.ReadableStream) '
+    + '{ navigator.serviceWorker.register("/_sw.js",{scope:"/"}); }\n</script>');
 
 
 class ServiceWorkerProxy {
@@ -82,6 +85,23 @@ class ServiceWorkerProxy {
         });
     }
 
+    _addRegisterScripts(body) {
+        // Inject a ServiceWorker registration at the end of the HTML.
+        if (isNodeStream(body)) {
+            // Append a stream
+            const concatStream = new stream.PassThrough();
+            body.on('data', chunk => concatStream.write(chunk));
+            body.on('end', () => concatStream.end(registrationScriptBuffer));
+            body = concatStream;
+        } else {
+            if (!Buffer.isBuffer(body)) {
+                body = new Buffer('' + body);
+            }
+            return Buffer.concat([body, registrationScriptBuffer]);
+        }
+        return body;
+    }
+
     proxyRequest(hyper, req) {
         const domain = req.headers.host = this._hackyHostRewrite(req.headers.host);
         const rp = req.params;
@@ -112,7 +132,7 @@ class ServiceWorkerProxy {
                     domainOptions.sw_default_cache_control['s-maxage'] * 1000);
         }
 
-        if (/^__?sw.js$/.test(rp.path)) {
+        if (/^_sw.js$/.test(rp.path)) {
             // Request for a ServiceWorker
             return setupPromise.then(() => this.swRequest(req, domain));
         }
@@ -132,15 +152,13 @@ class ServiceWorkerProxy {
                             // Only inject this into non-API / template
                             // requests.
                             if (/^text\/html/.test(headers['content-type']) && headers.age === undefined) {
-                                // Add a SW registration header. See
+                                // Add a SW registration script.
+                                // Consider switching to header-based
+                                // registration later. See
                                 // https://github.com/w3c/ServiceWorker/issues/685 for spec discussion.
-                                // Header-based registration is currently only
-                                // supported in Chrome, but that's mostly a
-                                // good thing as Firefox's ServiceWorker
-                                // support ist still fairly immature. For
-                                // example, it is lacking ReadableStream
-                                // support.
-                                headers.link = '</_sw.js>; rel=serviceworker; scope=/';
+                                // Note: Header-based registration is currently only
+                                // supported in Chrome Canary.
+                                body = this._addRegisterScripts(body);
                             }
 
                             return {
