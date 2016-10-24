@@ -49,7 +49,7 @@ spec_root: &spec_root
                   rewrite_to: en.wikipedia.org
                 swproxy.wmflabs.org:
                   rewrite_to: en.wikipedia.org
-                swproxy_mobile.wmflabs.org:
+                swproxy-mobile.wmflabs.org:
                   rewrite_to: en.m.wikipedia.org
 
 # Finally, a standard service-runner config.
