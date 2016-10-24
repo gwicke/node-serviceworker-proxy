@@ -27,7 +27,7 @@
     "hyperswitch": "^0.7.0",
     "is-stream": "^1.1.0",
     "node-fetch-polyfill": "^2.0.4",
-    "node-serviceworker": "^0.2.0",
+    "node-serviceworker": "^0.3.0",
     "node-web-streams": "^0.2.1",
     "service-runner": "^2.0.10"
   }
