@@ -53,14 +53,6 @@ class ServiceWorkerProxy {
         return res;
     }
 
-    _hackyHostRewrite(host) {
-        if (/^localhost:?/.test(host) || host === 'swproxy.wmflabs.org') {
-            return 'en.wikipedia.org';
-        } else {
-            return host;
-        }
-    }
-
     // Convert a hyperswitch request to a `fetch` Request object.
     _makeRequest(req) {
         // Append the query string
@@ -103,10 +95,13 @@ class ServiceWorkerProxy {
     }
 
     proxyRequest(hyper, req) {
-        const domain = req.headers.host = this._hackyHostRewrite(req.headers.host);
+        const domainConfig = this._options.domains[req.headers.host];
+        if (domainConfig && domainConfig.rewrite_to) {
+            req.headers.host = domainConfig.rewrite_to;
+            return this.proxyRequest(hyper, req);
+        }
+        const domain = req.headers.host;
         const rp = req.params;
-
-
 
         let setupPromise = P.resolve();
         if (!this._swcontainer._registrations.get(domain)) {

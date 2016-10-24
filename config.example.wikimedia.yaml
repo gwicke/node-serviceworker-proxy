@@ -41,6 +41,16 @@ spec_root: &spec_root
               domains:
                 en.wikipedia.org:
                   scriptURL: https://raw.githubusercontent.com/gwicke/streaming-serviceworker-playground/master/build/sw.js
+                en.m.wikipedia.org:
+                  scriptURL: https://raw.githubusercontent.com/gwicke/streaming-serviceworker-playground/master/build/mobile_sw.js
+
+                # Some rewrites for testing.
+                localhost:8934:
+                  rewrite_to: en.wikipedia.org
+                swproxy.wmflabs.org:
+                  rewrite_to: en.wikipedia.org
+                swproxy_mobile.wmflabs.org:
+                  rewrite_to: en.m.wikipedia.org
 
 # Finally, a standard service-runner config.
 services:
