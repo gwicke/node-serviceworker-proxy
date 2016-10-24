@@ -8,7 +8,7 @@ const FormData = require('form-data');
 const crypto = require('crypto');
 const resolve_url = require('url').resolve;
 function make_url(domain, path) {
-    if (!/^http:\/\//.test(domain)) {
+    if (!/^https?:\/\//.test(domain)) {
         domain = 'https://' + domain;
     }
     return resolve_url(domain, path);
