@@ -42,7 +42,7 @@ spec_root: &spec_root
                 en.wikipedia.org:
                   scriptURL: https://raw.githubusercontent.com/gwicke/streaming-serviceworker-playground/master/build/sw.js
                 en.m.wikipedia.org:
-                  scriptURL: https://raw.githubusercontent.com/gwicke/streaming-serviceworker-playground/master/build/mobile_sw.js
+                  scriptURL: https://raw.githubusercontent.com/gwicke/streaming-serviceworker-playground/master/build/sw_mobile.js
 
                 # Some rewrites for testing.
                 localhost:8934:
