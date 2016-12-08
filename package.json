@@ -22,13 +22,13 @@
     "url": "https://github.com/gwicke/node-serviceworker-proxy/issues"
   },
   "dependencies": {
-    "bluebird": "^3.4.1",
+    "bluebird": "^3.4.6",
     "form-data": "^1.0.1",
-    "hyperswitch": "^0.7.0",
+    "hyperswitch": "^0.8.6",
     "is-stream": "^1.1.0",
     "node-fetch-polyfill": "^2.0.4",
     "node-serviceworker": "^0.3.0",
     "node-web-streams": "^0.2.1",
-    "service-runner": "^2.0.10"
+    "service-runner": "^2.1.12"
   }
 }
