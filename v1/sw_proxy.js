@@ -220,6 +220,7 @@ module.exports = function(options) {
                             name: 'path',
                             in: 'path',
                             type: 'string',
+                            required: false,
                             description: 'The request path',
                         }],
                     },
